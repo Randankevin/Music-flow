@@ -5,6 +5,13 @@
 
 'use strict';
 
+// Supabase Auth (set these before deploying)
+const SUPABASE_URL = 'https://fiblarscmuhhfotwsaib.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_CV7HHDtJD3iEUjChbRu8og_c--aXMnW';
+const supabaseClient = (window.supabase && SUPABASE_URL && SUPABASE_ANON_KEY)
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
 // ─── Sample Data ───────────────────────────────────────────────────────────────
 const SAMPLE_TRACKS = [
   { id:'t1', title:'Get The Message', artist:'50 Cent', album:'Single', duration:213, genre:'Hip-Hop',
@@ -71,6 +78,7 @@ let state = {
   allTracks: [...SAMPLE_TRACKS],
   queueTab: 'upnext',
   pendingAddTrack: null,
+  guestDownloads: 0,
 };
 
 // ─── DOM refs ──────────────────────────────────────────────────────────────────
@@ -93,6 +101,14 @@ function load(key, def) {
     const v = localStorage.getItem(`mf_${key}`);
     return v !== null ? JSON.parse(v) : def;
   } catch(e) { return def; }
+}
+
+function getGuestDownloads() {
+  return load('guest_downloads', 0);
+}
+function setGuestDownloads(count) {
+  save('guest_downloads', count);
+  state.guestDownloads = count;
 }
 
 function showToast(msg, duration=2500) {
@@ -143,21 +159,54 @@ function initAuth() {
     });
   });
 
-  $('btn-signin').addEventListener('click', () => {
+  const googleBtn = $('btn-google');
+  if(googleBtn) {
+    googleBtn.addEventListener('click', async () => {
+      if(!supabaseClient) return showToast('Supabase is not configured');
+      const redirectTo = window.location.origin + window.location.pathname;
+      const { error } = await supabaseClient.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo }
+      });
+      if(error) showToast(error.message || 'Google sign-in failed');
+    });
+  }
+
+  $('btn-signin').addEventListener('click', async () => {
     const email = $('signin-email').value.trim();
     const pass = $('signin-password').value;
     if(!email || !pass) return showToast('Please fill all fields');
+    if(supabaseClient) {
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
+      if(error) return showToast(error.message || 'Sign in failed');
+      if(data?.user) loginUser(formatSupabaseUser(data.user));
+      return;
+    }
     const users = load('users', {});
     if(!users[email] || users[email].password !== pass) return showToast('Invalid credentials');
     loginUser({ name: users[email].name, email });
   });
 
-  $('btn-signup').addEventListener('click', () => {
+  $('btn-signup').addEventListener('click', async () => {
     const name = $('signup-name').value.trim();
     const email = $('signup-email').value.trim();
     const pass = $('signup-password').value;
     if(!name || !email || !pass) return showToast('Please fill all fields');
     if(pass.length < 6) return showToast('Password must be 6+ chars');
+    if(supabaseClient) {
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password: pass,
+        options: { data: { full_name: name } }
+      });
+      if(error) return showToast(error.message || 'Sign up failed');
+      if(data?.user && data?.session) {
+        loginUser(formatSupabaseUser(data.user));
+      } else {
+        showToast('Check your email to confirm your account');
+      }
+      return;
+    }
     const users = load('users', {});
     if(users[email]) return showToast('Email already registered');
     users[email] = { name, password: pass };
@@ -170,10 +219,42 @@ function initAuth() {
   });
 }
 
+function formatSupabaseUser(user) {
+  const meta = user?.user_metadata || {};
+  const name = meta.full_name || meta.name || (user?.email ? user.email.split('@')[0] : 'User');
+  return { name, email: user?.email || null, isSupabase: true };
+}
+
+async function initSupabaseAuth() {
+  if(!supabaseClient) return;
+  const { data } = await supabaseClient.auth.getSession();
+  if(data?.session?.user) {
+    loginUser(formatSupabaseUser(data.session.user));
+  }
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if(event === 'SIGNED_IN' && session?.user) {
+      loginUser(formatSupabaseUser(session.user));
+    }
+    if(event === 'SIGNED_OUT' && state.user?.isSupabase) {
+      state = { ...state, user: null, currentTrack: null, isPlaying: false };
+      audio.pause();
+      audio.src = '';
+      $('app-shell').classList.add('hidden');
+      $('auth-screen').classList.remove('hidden');
+      updatePlayerUI();
+    }
+  });
+}
+
 function loginUser(user) {
   state.user = user;
   save('currentUser', user);
   loadUserData();
+  if(user?.isGuest) {
+    state.guestDownloads = getGuestDownloads();
+  } else {
+    state.guestDownloads = 0;
+  }
   $('auth-screen').classList.add('hidden');
   $('app-shell').classList.remove('hidden');
   initApp();
@@ -207,8 +288,12 @@ function updateUserUI() {
   $('sidebar-name').textContent = u.name || 'Guest';
 }
 
-$('btn-signout').addEventListener('click', () => {
+$('btn-signout').addEventListener('click', async () => {
   saveUserData();
+  if(supabaseClient && state.user?.isSupabase) {
+    await supabaseClient.auth.signOut();
+    return;
+  }
   state = { ...state, user: null, currentTrack: null, isPlaying: false };
   audio.pause();
   audio.src = '';
@@ -893,6 +978,10 @@ function renderQueuePanel() {
 
 // ─── Download ─────────────────────────────────────────────────────────────────
 function downloadTrack(track) {
+  if(state.user?.isGuest && state.guestDownloads >= 4) {
+    showToast('Sign in to download more tracks');
+    return;
+  }
   const src = resolveTrackSrc(track);
   if(src) {
     const a = document.createElement('a');
@@ -901,6 +990,12 @@ function downloadTrack(track) {
     a.rel = 'noopener';
     a.click();
     showToast(`Downloading "${track.title}"`);
+    if(state.user?.isGuest) {
+      setGuestDownloads(state.guestDownloads + 1);
+      if(state.guestDownloads >= 4) {
+        showToast('Guest download limit reached. Please sign in.');
+      }
+    }
     return;
   }
 
@@ -1077,8 +1172,12 @@ if('serviceWorker' in navigator) {
   audio.volume = state.volume;
 
   // Check existing session
-  const saved = load('currentUser', null);
-  if(saved) {
-    loginUser(saved);
+  if(supabaseClient) {
+    initSupabaseAuth();
+  } else {
+    const saved = load('currentUser', null);
+    if(saved) {
+      loginUser(saved);
+    }
   }
 })();
