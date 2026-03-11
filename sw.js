@@ -3,7 +3,8 @@
    Service Worker v1.0
    ============================ */
 
-const CACHE_NAME = 'musicflow-v2';
+const CACHE_NAME = 'musicflow-v3';
+const AUDIO_CACHE = 'musicflow-audio-v1';
 const OFFLINE_FALLBACK = './index.html';
 const STATIC_ASSETS = [
   './',
@@ -58,9 +59,16 @@ self.addEventListener('fetch', event => {
   // Skip chrome-extension and other schemes
   if(!['http:', 'https:'].includes(url.protocol)) return;
 
-  // Audio files — network only (too large to cache)
+  // Audio files — serve from offline cache if saved
   if(request.destination === 'audio' || request.destination === 'video') {
-    event.respondWith(fetch(request).catch(() => new Response('', { status: 503 })));
+    event.respondWith(
+      caches.open(AUDIO_CACHE).then(cache =>
+        cache.match(request).then(cached => {
+          if(cached) return cached;
+          return fetch(request);
+        })
+      ).catch(() => new Response('', { status: 503 }))
+    );
     return;
   }
 

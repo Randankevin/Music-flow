@@ -41,6 +41,7 @@ body {
   min-height: 100vh;
   min-height: 100dvh;
   overflow: hidden;
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
 }
@@ -209,6 +210,25 @@ button, input, textarea { -webkit-tap-highlight-color: transparent; }
 }
 .btn-guest:hover { background: var(--surface); color: var(--text); border-color: var(--text3); }
 
+.btn-google {
+  width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(255,255,255,0.04);
+  transition: all 0.2s;
+  margin-bottom: 10px;
+}
+.btn-google:hover { background: var(--surface); border-color: var(--text3); }
+.google-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%; background: white;
+}
+
 /* ============================
    APP SHELL
    ============================ */
@@ -323,6 +343,7 @@ button, input, textarea { -webkit-tap-highlight-color: transparent; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  overflow-x: hidden;
   background: var(--bg);
 }
 
@@ -372,6 +393,7 @@ button, input, textarea { -webkit-tap-highlight-color: transparent; }
 
 /* ─── Views ─── */
 .views-container { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.views-container { overflow-x: hidden; }
 
 .view { display: none; }
 .view.active { display: block; }
@@ -1096,7 +1118,9 @@ button, input, textarea { -webkit-tap-highlight-color: transparent; }
   .drop-zone { margin: 0 16px 20px; padding: 40px 16px; }
   .auth-container { padding: 28px 22px; }
   .player-center { display: none; }
-  .player { justify-content: space-between; }
+  .player { justify-content: space-between; gap: 8px; }
+  .player-right { gap: 4px; }
+  .player-track { flex: 1; min-width: 0; flex-shrink: 1; }
   .player-art { width: 44px; height: 44px; }
   .fsp-art { width: 220px; height: 220px; }
   .modal-box { width: calc(100vw - 32px); }

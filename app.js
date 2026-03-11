@@ -75,6 +75,7 @@ let state = {
   playlists: [],
   localTracks: [],
   recentlyPlayed: [],
+  downloads: [],
   allTracks: [...SAMPLE_TRACKS],
   queueTab: 'upnext',
   pendingAddTrack: null,
@@ -128,6 +129,19 @@ function shuffle(arr) {
 function resolveTrackSrc(track) {
   if(track.localSrc) return track.localSrc;
   return track.src ? encodeURI(track.src) : '';
+}
+
+async function cacheAudioForOffline(src) {
+  if(!('caches' in window)) return;
+  try {
+    const url = new URL(src, window.location.href);
+    if(url.origin !== window.location.origin) return;
+    const cache = await caches.open('musicflow-audio-v1');
+    const cached = await cache.match(url.href);
+    if(cached) return;
+    const res = await fetch(url.href);
+    if(res.ok) await cache.put(url.href, res.clone());
+  } catch(e) {}
 }
 
 function makeArtEl(track) {
@@ -269,6 +283,7 @@ function loadUserData() {
   state.playlists = load(`pl_${key}`, []);
   state.recentlyPlayed = load(`recent_${key}`, []);
   state.localTracks = load(`local_${key}`, []);
+  state.downloads = load(`dl_${key}`, []);
   state.allTracks = [...SAMPLE_TRACKS, ...state.localTracks];
 }
 
@@ -279,6 +294,7 @@ function saveUserData() {
   save(`pl_${key}`, state.playlists);
   save(`recent_${key}`, state.recentlyPlayed);
   save(`local_${key}`, state.localTracks);
+  save(`dl_${key}`, state.downloads);
 }
 
 function updateUserUI() {
@@ -310,6 +326,7 @@ function initApp() {
   renderLibrary();
   renderPlaylists();
   renderFavorites();
+  renderDownloads();
   renderLocalFiles();
 
   // Greet by time
@@ -321,7 +338,7 @@ function initApp() {
 function applyHashNavigation() {
   const hash = (window.location.hash || '').replace('#', '').trim();
   if(!hash) return;
-  const allowed = new Set(['home', 'discover', 'library', 'local', 'playlists', 'favorites', 'search']);
+  const allowed = new Set(['home', 'discover', 'library', 'local', 'playlists', 'favorites', 'downloads', 'search']);
   if(allowed.has(hash)) {
     navigateTo(hash);
   }
@@ -611,6 +628,23 @@ function renderFavorites() {
     return;
   }
   favTracks.forEach((t,i) => list.appendChild(makeTrackItem(t, i+1, favTracks)));
+}
+
+function renderDownloads() {
+  const list = $('downloads-list');
+  const countEl = $('downloads-count');
+  if(!list) return;
+  list.innerHTML = '';
+
+  const ids = state.downloads || [];
+  const tracks = ids.map(id => state.allTracks.find(t => t.id === id)).filter(Boolean);
+  if(countEl) countEl.textContent = `${tracks.length} track${tracks.length === 1 ? '' : 's'}`;
+
+  if(!tracks.length) {
+    list.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text3)">No downloads yet</div>`;
+    return;
+  }
+  tracks.forEach((t,i) => list.appendChild(makeTrackItem(t, i+1, tracks)));
 }
 
 // ─── Render Local Files ───────────────────────────────────────────────────────
@@ -990,6 +1024,12 @@ function downloadTrack(track) {
     a.rel = 'noopener';
     a.click();
     showToast(`Downloading "${track.title}"`);
+    if(!state.downloads.includes(track.id)) {
+      state.downloads.unshift(track.id);
+      saveUserData();
+      renderDownloads();
+    }
+    cacheAudioForOffline(src);
     if(state.user?.isGuest) {
       setGuestDownloads(state.guestDownloads + 1);
       if(state.guestDownloads >= 4) {
