@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0a0f">
+    <meta name="description" content="MusicFlow - Your Ultimate Music Experience">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="MusicFlow">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="format-detection" content="telephone=no">
+    <title>MusicFlow</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+    <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+</head>
+<body>
+
+<!-- Auth Screen -->
+<div class="auth-screen" id="auth-screen">
+    <div class="auth-bg">
+        <div class="auth-orb auth-orb-1"></div>
+        <div class="auth-orb auth-orb-2"></div>
+        <div class="auth-orb auth-orb-3"></div>
+    </div>
+    <div class="auth-container">
+        <div class="auth-logo">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                <circle cx="24" cy="24" r="24" fill="url(#logoGrad)"/>
+                <path d="M16 32V16l20 8-20 8z" fill="white"/>
+                <defs><linearGradient id="logoGrad" x1="0" y1="0" x2="48" y2="48"><stop stop-color="#6EE7F7"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs>
+            </svg>
+            <span class="auth-logo-text">MusicFlow<br> By Randan kevin</span>
+        </div>
+        <h1 class="auth-headline">Music without<br><em>limits</em></h1>
+        <p class="auth-sub">Stream, discover, and own your music.</p>
+
+        <div class="auth-tabs">
+            <button class="auth-tab active" data-tab="signin">Sign In</button>
+            <button class="auth-tab" data-tab="signup">Sign Up</button>
+        </div>
+
+        <div class="auth-form" id="signin-form">
+            <div class="input-group">
+                <span class="material-icons-round">mail</span>
+                <input type="email" id="signin-email" placeholder="Email address">
+            </div>
+            <div class="input-group">
+                <span class="material-icons-round">lock</span>
+                <input type="password" id="signin-password" placeholder="Password">
+            </div>
+            <button class="btn-auth" id="btn-signin">Sign In</button>
+        </div>
+
+        <div class="auth-form hidden" id="signup-form">
+            <div class="input-group">
+                <span class="material-icons-round">person</span>
+                <input type="text" id="signup-name" placeholder="Your name">
+            </div>
+            <div class="input-group">
+                <span class="material-icons-round">mail</span>
+                <input type="email" id="signup-email" placeholder="Email address">
+            </div>
+            <div class="input-group">
+                <span class="material-icons-round">lock</span>
+                <input type="password" id="signup-password" placeholder="Password">
+            </div>
+            <button class="btn-auth" id="btn-signup">Create Account</button>
+        </div>
+
+        <div class="auth-divider"><span>or</span></div>
+        <button class="btn-guest" id="btn-guest">Continue as Guest</button>
+    </div>
+</div>
+
+<!-- App Shell -->
+<div class="app-shell hidden" id="app-shell">
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-logo">
+            <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                <circle cx="24" cy="24" r="24" fill="url(#logoGrad2)"/>
+                <path d="M16 32V16l20 8-20 8z" fill="white"/>
+                <defs><linearGradient id="logoGrad2" x1="0" y1="0" x2="48" y2="48"><stop stop-color="#6EE7F7"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs>
+            </svg>
+            <span>MusicFlow</span>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="nav-group">
+                <span class="nav-label">Explore</span>
+                <a class="nav-item active" data-view="home">
+                    <span class="material-icons-round">home</span><span>Home</span>
+                </a>
+                <a class="nav-item" data-view="discover">
+                    <span class="material-icons-round">explore</span><span>Discover</span>
+                </a>
+                <a class="nav-item" data-view="library">
+                    <span class="material-icons-round">library_music</span><span>Library</span>
+                </a>
+                <a class="nav-item" data-view="local">
+                    <span class="material-icons-round">folder_open</span><span>Local Files</span>
+                </a>
+            </div>
+            <div class="nav-group">
+                <span class="nav-label">My Music</span>
+                <a class="nav-item" data-view="playlists">
+                    <span class="material-icons-round">playlist_play</span><span>Playlists</span>
+                </a>
+                <a class="nav-item" data-view="favorites">
+                    <span class="material-icons-round">favorite</span><span>Favorites</span>
+                </a>
+            </div>
+            <div class="nav-group">
+                <span class="nav-label">Playlists</span>
+                <div id="sidebar-playlists"></div>
+                <button class="btn-new-playlist" id="btn-new-playlist">
+                    <span class="material-icons-round">add</span><span>New Playlist</span>
+                </button>
+            </div>
+        </nav>
+
+        <div class="sidebar-user" id="sidebar-user">
+            <div class="user-avatar" id="sidebar-avatar">G</div>
+            <div class="user-info">
+                <div class="user-name" id="sidebar-name">Guest</div>
+                <div class="user-plan">Free Plan</div>
+            </div>
+            <button class="btn-icon-sm" id="btn-signout" title="Sign Out">
+                <span class="material-icons-round">logout</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main" id="main">
+
+        <!-- Top Bar -->
+        <header class="topbar">
+            <button class="btn-icon-sm btn-menu" id="btn-menu-toggle">
+                <span class="material-icons-round">menu</span>
+            </button>
+            <div class="search-wrap">
+                <span class="material-icons-round">search</span>
+                <input type="text" id="search-input" placeholder="Search songs, artists, albums...">
+                <button class="btn-icon-sm" id="btn-clear-search" style="display:none">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="topbar-right">
+                <button class="btn-icon-sm" id="btn-notifications">
+                    <span class="material-icons-round">notifications</span>
+                    <span class="notif-dot"></span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Views -->
+        <div class="views-container">
+
+            <!-- HOME -->
+            <section class="view active" id="home-view">
+                <div class="hero">
+                    <div class="hero-text">
+                        <p class="hero-eyebrow">Good evening</p>
+                        <h1 id="hero-greeting">Welcome back!</h1>
+                    </div>
+                    <div class="hero-quick">
+                        <button class="quick-play-btn" id="hero-play-btn">
+                            <span class="material-icons-round">play_arrow</span>
+                            Play Mix
+                        </button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-header">
+                        <h2>Recently Played</h2>
+                        <a class="see-all" data-view="library">See all</a>
+                    </div>
+                    <div class="cards-row" id="recently-played"></div>
+                </div>
+
+                <div class="section">
+                    <div class="section-header">
+                        <h2>Trending Now</h2>
+                        <a class="see-all" data-view="discover">See all</a>
+                    </div>
+                    <div class="track-list" id="trending-songs"></div>
+                </div>
+
+                <div class="section">
+                    <div class="section-header">
+                        <h2>Made For You</h2>
+                        <a class="see-all" data-view="discover">See all</a>
+                    </div>
+                    <div class="cards-row" id="made-for-you"></div>
+                </div>
+            </section>
+
+            <!-- DISCOVER -->
+            <section class="view" id="discover-view">
+                <div class="view-title">
+                    <h1>Discover</h1>
+                    <p>Explore new music and find your next obsession</p>
+                </div>
+                <div class="genre-grid" id="genre-grid"></div>
+                <div class="section">
+                    <div class="section-header"><h2>New Releases</h2></div>
+                    <div class="cards-row" id="new-releases"></div>
+                </div>
+                <div class="section">
+                    <div class="section-header"><h2>Popular Playlists</h2></div>
+                    <div class="cards-row" id="popular-playlists"></div>
+                </div>
+            </section>
+
+            <!-- LIBRARY -->
+            <section class="view" id="library-view">
+                <div class="view-title"><h1>Your Library</h1></div>
+                <div class="library-tabs">
+                    <button class="lib-tab active" data-lib="all">All</button>
+                    <button class="lib-tab" data-lib="songs">Songs</button>
+                    <button class="lib-tab" data-lib="albums">Albums</button>
+                    <button class="lib-tab" data-lib="artists">Artists</button>
+                </div>
+                <div class="track-list" id="library-list"></div>
+            </section>
+
+            <!-- LOCAL FILES -->
+            <section class="view" id="local-view">
+                <div class="view-title"><h1>Local Files</h1><p>Add music from your device</p></div>
+                <div class="drop-zone" id="drop-zone">
+                    <span class="material-icons-round">cloud_upload</span>
+                    <h3>Drop music files here</h3>
+                    <p>MP3, WAV, FLAC, AAC, OGG supported</p>
+                    <button class="btn-upload" id="btn-browse">Browse Files</button>
+                    <input type="file" id="file-input" accept="audio/*" multiple style="display:none">
+                </div>
+                <div class="section" id="local-section" style="display:none">
+                    <div class="section-header">
+                        <h2>Local Tracks</h2>
+                        <span id="local-count" class="count-badge">0</span>
+                    </div>
+                    <div class="track-list" id="local-list"></div>
+                </div>
+            </section>
+
+            <!-- PLAYLISTS -->
+            <section class="view" id="playlists-view">
+                <div class="view-title">
+                    <h1>Playlists</h1>
+                    <button class="btn-create-pl" id="btn-create-playlist-header">
+                        <span class="material-icons-round">add</span> Create
+                    </button>
+                </div>
+                <div class="cards-grid" id="playlists-grid"></div>
+            </section>
+
+            <!-- FAVORITES -->
+            <section class="view" id="favorites-view">
+                <div class="view-title favorites-header">
+                    <div class="fav-icon-wrap">
+                        <span class="material-icons-round">favorite</span>
+                    </div>
+                    <div>
+                        <h1>Liked Songs</h1>
+                        <p id="fav-count">0 songs</p>
+                    </div>
+                    <button class="quick-play-btn" id="btn-play-favorites" style="margin-left:auto">
+                        <span class="material-icons-round">play_arrow</span> Play All
+                    </button>
+                </div>
+                <div class="track-list" id="favorites-list"></div>
+            </section>
+
+            <!-- SEARCH RESULTS -->
+            <section class="view" id="search-view">
+                <div class="view-title"><h1>Search Results</h1></div>
+                <div class="track-list" id="search-results"></div>
+            </section>
+
+        </div><!-- /views -->
+    </main>
+</div><!-- /app-shell -->
+
+<!-- Bottom Player -->
+<div class="player" id="player">
+    <div class="player-track">
+        <div class="player-art" id="player-art">
+            <span class="material-icons-round">music_note</span>
+        </div>
+        <div class="player-meta">
+            <div class="player-title" id="player-title">No track playing</div>
+            <div class="player-artist" id="player-artist">-</div>
+        </div>
+        <button class="btn-like-sm" id="btn-like-player">
+            <span class="material-icons-round" id="like-icon-player">favorite_border</span>
+        </button>
+    </div>
+
+    <div class="player-center">
+        <div class="player-controls">
+            <button class="pctrl" id="btn-shuffle" title="Shuffle"><span class="material-icons-round">shuffle</span></button>
+            <button class="pctrl" id="btn-prev" title="Previous"><span class="material-icons-round">skip_previous</span></button>
+            <button class="pctrl pctrl-play" id="btn-play-pause">
+                <span class="material-icons-round" id="play-icon">play_arrow</span>
+            </button>
+            <button class="pctrl" id="btn-next" title="Next"><span class="material-icons-round">skip_next</span></button>
+            <button class="pctrl" id="btn-repeat" title="Repeat"><span class="material-icons-round">repeat</span></button>
+        </div>
+        <div class="player-progress">
+            <span class="ptime" id="current-time">0:00</span>
+            <div class="progress-bar" id="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+                <div class="progress-thumb" id="progress-thumb"></div>
+            </div>
+            <span class="ptime" id="total-duration">0:00</span>
+        </div>
+    </div>
+
+    <div class="player-right">
+        <button class="pctrl" id="btn-queue" title="Queue"><span class="material-icons-round">queue_music</span></button>
+        <button class="pctrl" id="btn-download-player" title="Download"><span class="material-icons-round">download</span></button>
+        <div class="volume-wrap">
+            <button class="pctrl" id="btn-volume"><span class="material-icons-round" id="volume-icon">volume_up</span></button>
+            <input type="range" class="volume-slider" id="volume-slider" min="0" max="100" value="80">
+        </div>
+        <button class="pctrl" id="btn-expand" title="Expand"><span class="material-icons-round">expand_less</span></button>
+    </div>
+</div>
+
+<!-- Full Screen Player -->
+<div class="fullscreen-player" id="fullscreen-player">
+    <div class="fsp-bg" id="fsp-bg"></div>
+    <div class="fsp-overlay"></div>
+    <div class="fsp-content">
+        <div class="fsp-topbar">
+            <button class="btn-icon-sm" id="btn-collapse">
+                <span class="material-icons-round">expand_more</span>
+            </button>
+            <span class="fsp-label">Now Playing</span>
+            <button class="btn-icon-sm" id="btn-fsp-more">
+                <span class="material-icons-round">more_horiz</span>
+            </button>
+        </div>
+        <div class="fsp-art-wrap">
+            <div class="fsp-art-glow" id="fsp-art-glow"></div>
+            <img class="fsp-art" id="fsp-art" src="" alt="Album Art">
+        </div>
+        <div class="fsp-info">
+            <div class="fsp-title-row">
+                <div>
+                    <h2 class="fsp-title" id="fsp-title">No track</h2>
+                    <p class="fsp-artist" id="fsp-artist">-</p>
+                </div>
+                <button class="btn-like-lg" id="btn-like-fsp">
+                    <span class="material-icons-round" id="like-icon-fsp">favorite_border</span>
+                </button>
+            </div>
+            <div class="fsp-progress-wrap">
+                <div class="fsp-progress-bar" id="fsp-progress-bar">
+                    <div class="fsp-progress-fill" id="fsp-progress-fill"></div>
+                </div>
+                <div class="fsp-times">
+                    <span id="fsp-current">0:00</span>
+                    <span id="fsp-total">0:00</span>
+                </div>
+            </div>
+            <div class="fsp-controls">
+                <button class="pctrl" id="btn-fsp-shuffle"><span class="material-icons-round">shuffle</span></button>
+                <button class="pctrl" id="btn-fsp-prev"><span class="material-icons-round">skip_previous</span></button>
+                <button class="pctrl pctrl-play pctrl-play-lg" id="btn-fsp-play">
+                    <span class="material-icons-round" id="fsp-play-icon">play_arrow</span>
+                </button>
+                <button class="pctrl" id="btn-fsp-next"><span class="material-icons-round">skip_next</span></button>
+                <button class="pctrl" id="btn-fsp-repeat"><span class="material-icons-round">repeat</span></button>
+            </div>
+            <div class="fsp-extra">
+                <button class="fsp-extra-btn" id="btn-fsp-download">
+                    <span class="material-icons-round">download</span> Download
+                </button>
+                <button class="fsp-extra-btn" id="btn-fsp-addplaylist">
+                    <span class="material-icons-round">playlist_add</span> Add to Playlist
+                </button>
+                <button class="fsp-extra-btn" id="btn-fsp-queue">
+                    <span class="material-icons-round">queue_music</span> Queue
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Queue Panel -->
+<div class="queue-panel" id="queue-panel">
+    <div class="queue-head">
+        <h3>Queue</h3>
+        <button class="btn-icon-sm" id="btn-close-queue"><span class="material-icons-round">close</span></button>
+    </div>
+    <div class="queue-tabs-row">
+        <button class="qtab active" data-qtab="upnext">Up Next</button>
+        <button class="qtab" data-qtab="recent">Recently Played</button>
+    </div>
+    <div class="queue-body" id="queue-body"></div>
+</div>
+
+<!-- Create Playlist Modal -->
+<div class="modal" id="playlist-modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-box">
+        <div class="modal-head">
+            <h2>New Playlist</h2>
+            <button class="btn-icon-sm" id="btn-close-modal"><span class="material-icons-round">close</span></button>
+        </div>
+        <div class="modal-body">
+            <div class="field">
+                <label>Playlist Name</label>
+                <input type="text" id="pl-name" placeholder="My awesome playlist">
+            </div>
+            <div class="field">
+                <label>Description</label>
+                <textarea id="pl-desc" placeholder="What's this playlist about?"></textarea>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-cancel" id="btn-cancel-pl">Cancel</button>
+            <button class="btn-confirm" id="btn-confirm-pl">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- Add to Playlist Modal -->
+<div class="modal" id="add-to-playlist-modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-box">
+        <div class="modal-head">
+            <h2>Add to Playlist</h2>
+            <button class="btn-icon-sm" id="btn-close-atp-modal"><span class="material-icons-round">close</span></button>
+        </div>
+        <div class="modal-body">
+            <div id="atp-playlist-list"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Audio -->
+<audio id="audio-player" preload="metadata"></audio>
+
+<script src="app.js"></script>
+</body>
+</html>
