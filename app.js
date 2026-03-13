@@ -80,6 +80,9 @@ let state = {
   queueTab: 'upnext',
   pendingAddTrack: null,
   guestDownloads: 0,
+  downloadTasks: {},
+  downloadMeta: {},
+  downloadUrls: {},
 };
 
 // ─── DOM refs ──────────────────────────────────────────────────────────────────
@@ -120,6 +123,14 @@ function showToast(msg, duration=2500) {
   t._timer = setTimeout(() => t.classList.remove('show'), duration);
 }
 
+function setButtonLoading(btn, loading, label) {
+  if(!btn) return;
+  if(!btn.dataset.label) btn.dataset.label = btn.textContent.trim();
+  btn.disabled = loading;
+  btn.classList.toggle('is-loading', loading);
+  btn.textContent = loading ? label : btn.dataset.label;
+}
+
 function shuffle(arr) {
   const a = [...arr];
   for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
@@ -142,6 +153,208 @@ async function cacheAudioForOffline(src) {
     const res = await fetch(url.href);
     if(res.ok) await cache.put(url.href, res.clone());
   } catch(e) {}
+}
+
+const DOWNLOAD_DB_NAME = 'musicflow-downloads';
+const DOWNLOAD_STORE = 'audio';
+let downloadDbPromise = null;
+
+function openDownloadDb() {
+  if(!('indexedDB' in window)) return Promise.reject(new Error('IndexedDB not supported'));
+  if(downloadDbPromise) return downloadDbPromise;
+  downloadDbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(DOWNLOAD_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if(!db.objectStoreNames.contains(DOWNLOAD_STORE)) {
+        db.createObjectStore(DOWNLOAD_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('Failed to open storage'));
+  });
+  return downloadDbPromise;
+}
+
+async function idbGet(key) {
+  const db = await openDownloadDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DOWNLOAD_STORE, 'readonly');
+    const store = tx.objectStore(DOWNLOAD_STORE);
+    const req = store.get(key);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error || new Error('Failed to read'));
+  });
+}
+
+async function idbSet(key, value) {
+  const db = await openDownloadDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DOWNLOAD_STORE, 'readwrite');
+    const store = tx.objectStore(DOWNLOAD_STORE);
+    const req = store.put(value, key);
+    req.onsuccess = () => resolve(true);
+    req.onerror = () => reject(req.error || new Error('Failed to write'));
+  });
+}
+
+async function idbDelete(key) {
+  const db = await openDownloadDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DOWNLOAD_STORE, 'readwrite');
+    const store = tx.objectStore(DOWNLOAD_STORE);
+    const req = store.delete(key);
+    req.onsuccess = () => resolve(true);
+    req.onerror = () => reject(req.error || new Error('Failed to delete'));
+  });
+}
+
+async function requestPersistentStorage() {
+  if(navigator.storage && navigator.storage.persist) {
+    try { await navigator.storage.persist(); } catch(e) {}
+  }
+}
+
+function formatBytes(bytes) {
+  if(!bytes || bytes <= 0) return '0 KB';
+  const units = ['KB','MB','GB'];
+  let val = bytes / 1024;
+  let i = 0;
+  while(val >= 1024 && i < units.length - 1) { val /= 1024; i++; }
+  return `${val.toFixed(val < 10 ? 1 : 0)} ${units[i]}`;
+}
+
+function getDownloadMeta(id) {
+  return state.downloadMeta ? state.downloadMeta[id] : null;
+}
+
+function isDownloaded(id) {
+  return !!getDownloadMeta(id);
+}
+
+function getDownloadStatus(id) {
+  const task = state.downloadTasks ? state.downloadTasks[id] : null;
+  if(task) {
+    return {
+      state: 'downloading',
+      progress: task.progress || 0,
+      received: task.received || 0,
+      total: task.total || 0,
+    };
+  }
+  const meta = getDownloadMeta(id);
+  if(meta) {
+    return {
+      state: 'downloaded',
+      progress: 1,
+      received: meta.size || 0,
+      total: meta.size || 0,
+      storage: meta.storage || 'idb',
+    };
+  }
+  return { state: 'idle', progress: 0, received: 0, total: 0 };
+}
+
+function clearDownloadUrls() {
+  if(!state.downloadUrls) return;
+  Object.values(state.downloadUrls).forEach(url => {
+    try { URL.revokeObjectURL(url); } catch(e) {}
+  });
+  state.downloadUrls = {};
+}
+
+function applyDownloadStatusToElement(el, status) {
+  if(!el) return;
+  const fill = el.querySelector('.download-progress-fill');
+  const textEl = el.querySelector('.download-progress-text');
+  const pctEl = el.querySelector('.download-progress-pct');
+
+  el.classList.remove('is-active', 'is-complete', 'is-error', 'is-indeterminate');
+
+  if(status.state === 'downloading') {
+    el.classList.add('is-active');
+    if(status.total > 0) {
+      const pct = Math.max(0, Math.min(100, Math.round(status.progress * 100)));
+      if(fill) fill.style.width = `${pct}%`;
+      if(pctEl) pctEl.textContent = `${pct}%`;
+      if(textEl) textEl.textContent = `Downloading - ${formatBytes(status.received)} / ${formatBytes(status.total)}`;
+    } else {
+      el.classList.add('is-indeterminate');
+      if(fill) fill.style.width = '35%';
+      if(pctEl) pctEl.textContent = '';
+      if(textEl) textEl.textContent = 'Downloading...';
+    }
+  } else if(status.state === 'downloaded') {
+    el.classList.add('is-complete');
+    if(fill) fill.style.width = '100%';
+    if(pctEl) pctEl.textContent = '';
+    if(textEl) textEl.textContent = 'Saved for offline';
+  } else {
+    if(fill) fill.style.width = '0%';
+    if(pctEl) pctEl.textContent = '';
+    if(textEl) textEl.textContent = '';
+  }
+}
+
+function updateDownloadElements(id, status) {
+  const progressEls = document.querySelectorAll(`.download-progress[data-id="${id}"]`);
+  progressEls.forEach(el => applyDownloadStatusToElement(el, status));
+
+  const btns = document.querySelectorAll(`.btn-track-action[data-action="download"][data-id="${id}"]`);
+  btns.forEach(btn => {
+    const icon = btn.querySelector('.material-icons-round');
+    const disabled = status.state === 'downloading' || status.state === 'downloaded';
+    btn.classList.toggle('is-disabled', disabled);
+    btn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+    if(icon) {
+      icon.textContent = status.state === 'downloaded'
+        ? 'check_circle'
+        : status.state === 'downloading'
+          ? 'downloading'
+          : 'download';
+    }
+    btn.title = status.state === 'downloaded'
+      ? 'Saved offline'
+      : status.state === 'downloading'
+        ? 'Downloading...'
+        : 'Download';
+  });
+
+  const playerBtn = $('btn-download-player');
+  if(playerBtn && state.currentTrack?.id === id) {
+    const icon = playerBtn.querySelector('.material-icons-round');
+    const disabled = status.state === 'downloading' || status.state === 'downloaded';
+    playerBtn.classList.toggle('is-disabled', disabled);
+    if(icon) {
+      icon.textContent = status.state === 'downloaded'
+        ? 'check_circle'
+        : status.state === 'downloading'
+          ? 'downloading'
+          : 'download';
+    }
+    playerBtn.title = status.state === 'downloaded'
+      ? 'Saved offline'
+      : status.state === 'downloading'
+        ? 'Downloading...'
+        : 'Download';
+  }
+}
+
+async function resolvePlayableSrc(track) {
+  if(track.localSrc) return track.localSrc;
+  const meta = getDownloadMeta(track.id);
+  if(meta && meta.storage === 'idb') {
+    if(state.downloadUrls && state.downloadUrls[track.id]) return state.downloadUrls[track.id];
+    try {
+      const blob = await idbGet(track.id);
+      if(blob) {
+        const url = URL.createObjectURL(blob);
+        state.downloadUrls[track.id] = url;
+        return url;
+      }
+    } catch(e) {}
+  }
+  return resolveTrackSrc(track);
 }
 
 function makeArtEl(track) {
@@ -190,15 +403,26 @@ function initAuth() {
     const email = $('signin-email').value.trim();
     const pass = $('signin-password').value;
     if(!email || !pass) return showToast('Please fill all fields');
+    const btn = $('btn-signin');
+    setButtonLoading(btn, true, 'Signing in...');
     if(supabaseClient) {
       const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
-      if(error) return showToast(error.message || 'Sign in failed');
+      if(error) {
+        showToast(error.message || 'Sign in failed');
+        setButtonLoading(btn, false);
+        return;
+      }
       if(data?.user) loginUser(formatSupabaseUser(data.user));
+      setButtonLoading(btn, false);
       return;
     }
     const users = load('users', {});
-    if(!users[email] || users[email].password !== pass) return showToast('Invalid credentials');
+    if(!users[email] || users[email].password !== pass) {
+      setButtonLoading(btn, false);
+      return showToast('Invalid credentials');
+    }
     loginUser({ name: users[email].name, email });
+    setButtonLoading(btn, false);
   });
 
   $('btn-signup').addEventListener('click', async () => {
@@ -207,36 +431,64 @@ function initAuth() {
     const pass = $('signup-password').value;
     if(!name || !email || !pass) return showToast('Please fill all fields');
     if(pass.length < 6) return showToast('Password must be 6+ chars');
+    const btn = $('btn-signup');
+    setButtonLoading(btn, true, 'Creating...');
     if(supabaseClient) {
       const { data, error } = await supabaseClient.auth.signUp({
         email,
         password: pass,
         options: { data: { full_name: name } }
       });
-      if(error) return showToast(error.message || 'Sign up failed');
+      if(error) {
+        showToast(error.message || 'Sign up failed');
+        setButtonLoading(btn, false);
+        return;
+      }
       if(data?.user && data?.session) {
         loginUser(formatSupabaseUser(data.user));
       } else {
         showToast('Check your email to confirm your account');
       }
+      setButtonLoading(btn, false);
       return;
     }
     const users = load('users', {});
-    if(users[email]) return showToast('Email already registered');
+    if(users[email]) {
+      setButtonLoading(btn, false);
+      return showToast('Email already registered');
+    }
     users[email] = { name, password: pass };
     save('users', users);
     loginUser({ name, email });
+    setButtonLoading(btn, false);
   });
 
   $('btn-guest').addEventListener('click', () => {
     loginUser({ name: 'Guest', email: null, isGuest: true });
+  });
+
+  ['signin-email', 'signin-password'].forEach(id => {
+    $(id).addEventListener('keydown', e => {
+      if(e.key === 'Enter') {
+        e.preventDefault();
+        $('btn-signin').click();
+      }
+    });
+  });
+  ['signup-name', 'signup-email', 'signup-password'].forEach(id => {
+    $(id).addEventListener('keydown', e => {
+      if(e.key === 'Enter') {
+        e.preventDefault();
+        $('btn-signup').click();
+      }
+    });
   });
 }
 
 function formatSupabaseUser(user) {
   const meta = user?.user_metadata || {};
   const name = meta.full_name || meta.name || (user?.email ? user.email.split('@')[0] : 'User');
-  return { name, email: user?.email || null, isSupabase: true };
+  return { name, email: user?.email || null, id: user?.id || null, isSupabase: true };
 }
 
 async function initSupabaseAuth() {
@@ -250,6 +502,8 @@ async function initSupabaseAuth() {
       loginUser(formatSupabaseUser(session.user));
     }
     if(event === 'SIGNED_OUT' && state.user?.isSupabase) {
+      clearDownloadUrls();
+      state.downloadTasks = {};
       state = { ...state, user: null, currentTrack: null, isPlaying: false };
       audio.pause();
       audio.src = '';
@@ -264,6 +518,8 @@ function loginUser(user) {
   state.user = user;
   save('currentUser', user);
   loadUserData();
+  state.downloadTasks = {};
+  clearDownloadUrls();
   if(user?.isGuest) {
     state.guestDownloads = getGuestDownloads();
   } else {
@@ -278,23 +534,45 @@ function loginUser(user) {
 
 function loadUserData() {
   if(!state.user) return;
-  const key = state.user.email || 'guest';
+  const key = state.user.email || state.user.id || 'guest';
   state.favorites = new Set(load(`fav_${key}`, []));
   state.playlists = load(`pl_${key}`, []);
   state.recentlyPlayed = load(`recent_${key}`, []);
   state.localTracks = load(`local_${key}`, []);
   state.downloads = load(`dl_${key}`, []);
+  state.downloadMeta = load(`dlmeta_${key}`, {});
   state.allTracks = [...SAMPLE_TRACKS, ...state.localTracks];
+
+  // Backfill metadata for older downloads
+  state.downloads = state.downloads.filter(id => !!id);
+  state.downloads.forEach(id => {
+    if(!state.downloadMeta[id]) {
+      const t = state.allTracks.find(track => track.id === id);
+      if(t) {
+        state.downloadMeta[id] = {
+          id: t.id,
+          title: t.title,
+          artist: t.artist,
+          album: t.album || '',
+          duration: t.duration || 0,
+          size: 0,
+          storage: 'cache',
+          savedAt: Date.now(),
+        };
+      }
+    }
+  });
 }
 
 function saveUserData() {
   if(!state.user) return;
-  const key = state.user.email || 'guest';
+  const key = state.user.email || state.user.id || 'guest';
   save(`fav_${key}`, [...state.favorites]);
   save(`pl_${key}`, state.playlists);
   save(`recent_${key}`, state.recentlyPlayed);
   save(`local_${key}`, state.localTracks);
   save(`dl_${key}`, state.downloads);
+  save(`dlmeta_${key}`, state.downloadMeta);
 }
 
 function updateUserUI() {
@@ -306,6 +584,7 @@ function updateUserUI() {
 
 $('btn-signout').addEventListener('click', async () => {
   saveUserData();
+  clearDownloadUrls();
   if(supabaseClient && state.user?.isSupabase) {
     await supabaseClient.auth.signOut();
     return;
@@ -444,6 +723,23 @@ function makeCard(track) {
 function makeTrackItem(track, num, context) {
   const isPlaying = state.currentTrack?.id === track.id && state.isPlaying;
   const isFav = state.favorites.has(track.id);
+  const dlStatus = getDownloadStatus(track.id);
+  const hasDownloadSource = !!track.src && !track.isLocal;
+  const downloadBlocked = !hasDownloadSource;
+  const downloadDisabled = dlStatus.state === 'downloading' || dlStatus.state === 'downloaded';
+  const downloadIcon = dlStatus.state === 'downloaded'
+    ? 'check_circle'
+    : dlStatus.state === 'downloading'
+      ? 'downloading'
+      : 'download';
+  const downloadTitle = downloadBlocked
+    ? (track.isLocal ? 'Local file' : 'No download source')
+    : dlStatus.state === 'downloaded'
+      ? 'Saved offline'
+      : dlStatus.state === 'downloading'
+        ? 'Downloading...'
+        : 'Download';
+
   const div = document.createElement('div');
   div.className = `track-item${isPlaying ? ' playing' : ''}`;
   div.dataset.id = track.id;
@@ -467,6 +763,16 @@ function makeTrackItem(track, num, context) {
   const info = document.createElement('div');
   info.className = 'track-info';
   info.innerHTML = `<div class="track-name">${track.title}</div><div class="track-meta">${track.artist} - ${track.album || ''}</div>`;
+  const progress = document.createElement('div');
+  progress.className = 'download-progress';
+  progress.dataset.id = track.id;
+  progress.innerHTML = `
+    <div class="download-progress-bar"><div class="download-progress-fill"></div></div>
+    <div class="download-progress-meta">
+      <span class="download-progress-text"></span>
+      <span class="download-progress-pct"></span>
+    </div>`;
+  info.appendChild(progress);
   div.appendChild(info);
 
   div.innerHTML += `
@@ -475,8 +781,8 @@ function makeTrackItem(track, num, context) {
       <button class="btn-like-sm ${isFav ? 'liked' : ''}" data-id="${track.id}" title="${isFav ? 'Unlike' : 'Like'}">
         <span class="material-icons-round">${isFav ? 'favorite' : 'favorite_border'}</span>
       </button>
-      <button class="btn-track-action" data-action="download" data-id="${track.id}" title="Download">
-        <span class="material-icons-round">download</span>
+      <button class="btn-track-action ${downloadDisabled ? 'is-disabled' : ''}" data-action="download" data-id="${track.id}" title="${downloadTitle}" aria-disabled="${downloadDisabled ? 'true' : 'false'}">
+        <span class="material-icons-round">${downloadIcon}</span>
       </button>
       <button class="btn-track-action" data-action="add-playlist" data-id="${track.id}" title="Add to playlist">
         <span class="material-icons-round">playlist_add</span>
@@ -486,6 +792,7 @@ function makeTrackItem(track, num, context) {
   // Re-append info after thumb
   const existingInfo = div.querySelector('.track-info');
   if(!existingInfo) div.appendChild(info);
+  applyDownloadStatusToElement(progress, dlStatus);
 
   div.addEventListener('click', (e) => {
     if(e.target.closest('.btn-like-sm, .btn-track-action')) return;
@@ -636,9 +943,27 @@ function renderDownloads() {
   if(!list) return;
   list.innerHTML = '';
 
-  const ids = state.downloads || [];
-  const tracks = ids.map(id => state.allTracks.find(t => t.id === id)).filter(Boolean);
-  if(countEl) countEl.textContent = `${tracks.length} track${tracks.length === 1 ? '' : 's'}`;
+  const activeIds = state.downloadTasks ? Object.keys(state.downloadTasks) : [];
+  const ids = Array.from(new Set([...(activeIds || []), ...(state.downloads || [])]));
+  const tracks = ids.map(id => {
+    const t = state.allTracks.find(track => track.id === id);
+    if(t) return t;
+    const meta = getDownloadMeta(id);
+    if(!meta) return null;
+    return {
+      id: meta.id,
+      title: meta.title || 'Downloaded Track',
+      artist: meta.artist || 'Unknown Artist',
+      album: meta.album || '',
+      duration: meta.duration || 0,
+      cover: '',
+      src: '',
+    };
+  }).filter(Boolean);
+  const completedCount = (state.downloads || []).length;
+  if(countEl) {
+    countEl.textContent = `${completedCount} track${completedCount === 1 ? '' : 's'}${activeIds.length ? ` • ${activeIds.length} downloading` : ''}`;
+  }
 
   if(!tracks.length) {
     list.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text3)">No downloads yet</div>`;
@@ -715,22 +1040,22 @@ function playTrack(track) {
   } else {
     state.queueIndex = idx;
   }
-  startTrack();
+  startTrack().catch(() => {});
 }
 
 function playQueue(tracks, startIdx) {
   state.queue = [...tracks];
   state.queueIndex = startIdx;
-  startTrack();
+  startTrack().catch(() => {});
 }
 
-function startTrack() {
+async function startTrack() {
   const track = state.queue[state.queueIndex];
   if(!track) return;
   state.currentTrack = track;
   state.isPlaying = true;
 
-  const src = resolveTrackSrc(track);
+  const src = await resolvePlayableSrc(track);
   if(src) {
     audio.src = src;
     audio.play().catch(() => {});
@@ -769,7 +1094,7 @@ function prevTrack() {
   if(audio.currentTime > 3) { audio.currentTime = 0; return; }
   if(state.isShuffle) { state.queueIndex = Math.floor(Math.random() * state.queue.length); }
   else { state.queueIndex = (state.queueIndex - 1 + state.queue.length) % state.queue.length; }
-  startTrack();
+  startTrack().catch(() => {});
 }
 
 function nextTrack() {
@@ -779,7 +1104,7 @@ function nextTrack() {
   if(state.queueIndex === 0 && state.repeatMode === 0 && !state.isShuffle) {
     state.isPlaying = false; updatePlayerUI(); return;
   }
-  startTrack();
+  startTrack().catch(() => {});
 }
 
 // Audio events
@@ -892,6 +1217,9 @@ function updatePlayerUI() {
   playBtn.classList.toggle('playing', state.isPlaying);
 
   updateLikeButtons();
+  if(state.currentTrack) {
+    updateDownloadElements(state.currentTrack.id, getDownloadStatus(state.currentTrack.id));
+  }
 }
 
 function highlightPlayingTrack() {
@@ -1011,50 +1339,121 @@ function renderQueuePanel() {
 }
 
 // ─── Download ─────────────────────────────────────────────────────────────────
-function downloadTrack(track) {
+async function downloadTrack(track) {
   if(state.user?.isGuest && state.guestDownloads >= 4) {
     showToast('Sign in to download more tracks');
     return;
   }
+  if(track.isLocal) {
+    showToast('Local files are already on your device');
+    return;
+  }
+
   const src = resolveTrackSrc(track);
-  if(src) {
-    const a = document.createElement('a');
-    a.href = src;
-    a.download = `${track.title}.mp3`;
-    a.rel = 'noopener';
-    a.click();
-    showToast(`Downloading "${track.title}"`);
-    if(!state.downloads.includes(track.id)) {
-      state.downloads.unshift(track.id);
-      saveUserData();
-      renderDownloads();
+  if(!src) {
+    showToast('No download source available');
+    return;
+  }
+
+  const url = new URL(src, window.location.href);
+  if(url.origin !== window.location.origin) {
+    showToast('Only on-site downloads are supported');
+    return;
+  }
+
+  if(isDownloaded(track.id)) {
+    showToast('Already saved for offline');
+    return;
+  }
+  if(state.downloadTasks && state.downloadTasks[track.id]) {
+    showToast('Download already in progress');
+    return;
+  }
+
+  const task = { id: track.id, progress: 0, received: 0, total: 0 };
+  state.downloadTasks[track.id] = task;
+  updateDownloadElements(track.id, getDownloadStatus(track.id));
+  renderDownloads();
+
+  try {
+    await requestPersistentStorage();
+    const res = await fetch(url.href);
+    if(!res.ok) throw new Error('Download failed');
+
+    const total = parseInt(res.headers.get('Content-Length') || '0', 10);
+    task.total = Number.isFinite(total) ? total : 0;
+    const contentType = res.headers.get('Content-Type') || 'audio/mpeg';
+
+    let blob;
+    if(res.body && res.body.getReader) {
+      const reader = res.body.getReader();
+      const chunks = [];
+      while(true) {
+        const { done, value } = await reader.read();
+        if(done) break;
+        chunks.push(value);
+        task.received += value.length;
+        if(task.total > 0) task.progress = task.received / task.total;
+        updateDownloadElements(track.id, getDownloadStatus(track.id));
+      }
+      blob = new Blob(chunks, { type: contentType });
+    } else {
+      blob = await res.blob();
+      task.received = blob.size;
+      task.total = blob.size;
+      task.progress = 1;
     }
-    cacheAudioForOffline(src);
+
+    let storage = 'idb';
+    try {
+      await idbSet(track.id, blob);
+    } catch(e) {
+      storage = 'cache';
+      if('caches' in window) {
+        try {
+          const cache = await caches.open('musicflow-audio-v1');
+          await cache.put(url.href, new Response(blob, { headers: { 'Content-Type': blob.type || contentType } }));
+        } catch(err) {
+          storage = 'none';
+        }
+      } else {
+        storage = 'none';
+      }
+    }
+
+    if(storage === 'none') throw new Error('Failed to store download');
+
+    state.downloadMeta[track.id] = {
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      album: track.album || '',
+      duration: track.duration || 0,
+      size: blob.size,
+      storage,
+      savedAt: Date.now(),
+    };
+    if(!state.downloads.includes(track.id)) state.downloads.unshift(track.id);
+    saveUserData();
+
+    showToast(`Saved "${track.title}" for offline`);
+
     if(state.user?.isGuest) {
       setGuestDownloads(state.guestDownloads + 1);
       if(state.guestDownloads >= 4) {
         showToast('Guest download limit reached. Please sign in.');
       }
     }
-    return;
+  } catch(e) {
+    console.error(e);
+    showToast('Download failed. Please try again.');
+  } finally {
+    if(state.downloadTasks) delete state.downloadTasks[track.id];
+    updateDownloadElements(track.id, getDownloadStatus(track.id));
+    renderDownloads();
   }
-
-  // For demo tracks (no real audio), create a text file as placeholder
-  // In a real app, this would download the actual audio file
-  showToast(`⬇️ Saving "${track.title}" to your device…`);
-
-  // Simulate download with track info
-  const meta = `Title: ${track.title}\nArtist: ${track.artist}\nAlbum: ${track.album}\n\nNote: Connect to a real audio source to download.`;
-  const blob = new Blob([meta], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${track.title} - ${track.artist}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }
+
 
 $('btn-download-player').addEventListener('click', () => {
   if(state.currentTrack) downloadTrack(state.currentTrack);
@@ -1210,6 +1609,7 @@ if('serviceWorker' in navigator) {
 (function boot() {
   initAuth();
   audio.volume = state.volume;
+  requestPersistentStorage();
 
   // Check existing session
   if(supabaseClient) {

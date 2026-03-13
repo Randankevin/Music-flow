@@ -187,6 +187,8 @@ button, input, textarea { -webkit-tap-highlight-color: transparent; }
 }
 .btn-auth:hover { opacity: 0.9; }
 .btn-auth:active { transform: scale(0.98); }
+.btn-auth:disabled,
+.btn-auth.is-loading { opacity: 0.7; cursor: default; }
 
 .auth-divider {
   display: flex; align-items: center; gap: 12px;
@@ -560,6 +562,43 @@ button, input, textarea { -webkit-tap-highlight-color: transparent; }
 .btn-like-sm:hover, .btn-track-action:hover { background: var(--surface2); color: var(--accent); }
 .btn-like-sm.liked { color: var(--accent3); }
 .btn-like-sm .material-icons-round, .btn-track-action .material-icons-round { font-size: 18px; }
+.btn-track-action.is-disabled { opacity: 0.5; pointer-events: none; }
+
+.download-progress {
+  margin-top: 6px;
+  display: none;
+}
+.download-progress.is-active,
+.download-progress.is-complete,
+.download-progress.is-indeterminate { display: block; }
+.download-progress-bar {
+  height: 4px;
+  background: var(--bg3);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.download-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+.download-progress.is-complete .download-progress-fill { background: var(--accent2); }
+.download-progress.is-indeterminate .download-progress-fill {
+  animation: downloadIndeterminate 1.2s ease-in-out infinite;
+}
+.download-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 4px;
+}
+
+@keyframes downloadIndeterminate {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
 
 /* ─── Genre Grid ─── */
 .genre-grid {
@@ -735,6 +774,7 @@ button, input, textarea { -webkit-tap-highlight-color: transparent; }
 .pctrl:hover { color: var(--text); background: var(--surface); }
 .pctrl.active { color: var(--accent); }
 .pctrl .material-icons-round { font-size: 20px; }
+.pctrl.is-disabled { opacity: 0.5; pointer-events: none; }
 
 .pctrl-play {
   width: 42px; height: 42px;

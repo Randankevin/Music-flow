@@ -43,7 +43,7 @@ self.addEventListener('activate', event => {
   console.log('[SW] Activating…');
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => k !== CACHE_NAME && k !== AUDIO_CACHE).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
